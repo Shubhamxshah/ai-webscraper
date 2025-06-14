@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
 
-const ScrapeData = async (source, tagForArticleLinks) => {
+const ScrapeData = async (source, tagForArticleLinks, titleTag, markdownTag) => {
   const browser = await puppeteer.launch({
     headless: false,
     defaultViewport: null,
@@ -12,30 +12,33 @@ const ScrapeData = async (source, tagForArticleLinks) => {
     waitUntil: "domcontentloaded",
   });
 
-  const articleLinks = await page.evaluate(() => {
-    const List = document.querySelectorAll('h1 > a[href^="/blog/"]');
-
+  const articleLinks = await page.evaluate((tagForArticleLinks) => {
+    const List = document.querySelectorAll(tagForArticleLinks);
     return Array.from(List).map((link) => link.href);
-  });
+  }, tagForArticleLinks);
 
   const extractDataFromLinks = async (links) => {
     const markdown = [];
 
     for (const link of links) {
-      await page.goto(link, {
-        waitUntil: "domcontentloaded",
-      });
+      try {
+        await page.goto(link, {
+          waitUntil: "domcontentloaded",
+        });
 
-      const info = await page.evaluate(() => {
-        const title = document.querySelector("h1")?.innerText || "";
-        const paragraphs = Array.from(
-          document.querySelectorAll('div[class^="leading-7"] > p'),
-        );
-        const data = paragraphs.map((p) => p.innerText).join("\n");
-        return { title, data };
-      });
+        const info = await page.evaluate((titleTag, markdownTag) => {
+          const title = document.querySelector(titleTag)?.innerText || "";
+          const paragraphs = Array.from(
+            document.querySelectorAll(markdownTag)
+          );
+          const data = paragraphs.map((p) => p.innerText).join("\n");
+          return { title, data };
+        }, titleTag, markdownTag);
 
-      markdown.push(info);
+        markdown.push(info);
+      } catch (err) {
+        console.error(`Error scraping ${link}:`, err);
+      }
     }
 
     return markdown;
@@ -48,4 +51,10 @@ const ScrapeData = async (source, tagForArticleLinks) => {
   await browser.close();
 };
 
-ScrapeData();
+ScrapeData(
+  "https://interviewing.io/blog",
+  `h1 > a[href^="/blog/"]`,
+  "h1",
+  `div[class^="leading-7"] > p`
+);
+
